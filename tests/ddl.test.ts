@@ -10,8 +10,8 @@ describe('ddl', () => {
     it('typings work', () => {
       // this test should only compile when the typings are correct
       const o = z.object({
-        scol: Columns.text(),
-        bincol: Columns.binary()
+        scol: Columns.text({}),
+        bincol: Columns.binary({})
       });
 
       type T = z.infer<typeof o>;
