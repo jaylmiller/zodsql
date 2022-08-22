@@ -37,7 +37,6 @@ describe('schema', () => {
 
       it('getDb', async () => {
         const db = schema.getDb();
-
         const rows = await db
           .selectFrom('t1')
           .select(['a', 't1.a'])

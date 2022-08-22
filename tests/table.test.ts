@@ -35,6 +35,10 @@ describe('table', () => {
         });
         assert.ok(!bad.success);
       });
+      afterEach(() => {
+        testTable.getDb().destroy();
+        testTable.bindDb(getTestDb());
+      });
       it('typing works', () => {
         type T = z.infer<typeof testTable>;
         expectType<T['a']>('');
@@ -64,7 +68,7 @@ describe('table', () => {
       });
 
       it('ddl', async () => {
-        const ddl = testTable.ddl();
+        const ddl = testTable.createTable();
         await ddl.execute();
         const db = testTable.getDb();
         const tables = await db.introspection.getTables();
@@ -75,20 +79,28 @@ describe('table', () => {
         assert.equal(pkCol?.dataType.toLowerCase(), 'text');
       });
 
-      it('fromDb', async () => {
-        const table = createTableFn(getTestDb())(
-          {name: 'testy'},
-          testTable._initShape
-        );
-        testTable.parse({
-          a: 'asdf',
-          b: 1
-        });
-        const bad = testTable.safeParse({
-          a: 1
-        });
-        assert.ok(!bad.success);
-        await table.ddl().execute();
+      it('insert one', async () => {
+        await testTable.createTable().execute();
+        const stmt = testTable.insert({a: 'testy', b: 1, c: Buffer.alloc(1)});
+        const res = await stmt.execute();
+        return;
+      });
+
+      it('insert many', async () => {
+        await testTable.createTable().execute();
+        const stmt = testTable.insert([
+          {a: 'testy', b: 1, c: Buffer.alloc(1)},
+          {a: 'asdf', b: 3},
+          {a: 'asdfasdf', b: 4}
+        ]);
+        const res = await stmt.execute();
+        const rows = await testTable
+          .getDb()
+          .selectFrom(testTable.name)
+          .selectAll()
+          .execute();
+        assert.equal(rows.length, 3);
+        return;
       });
     });
   });

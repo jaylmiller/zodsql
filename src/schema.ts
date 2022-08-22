@@ -3,7 +3,7 @@
 import assert from 'assert';
 import {objItems} from './util';
 import {ZsqlRawShape, ZsqlTable} from './table';
-import {Kysely} from 'kysely';
+import {Compilable, Kysely} from 'kysely';
 import {NoDatabaseFound} from './errs';
 
 type _InferRaw<T extends {[k: string]: ZsqlTable<ZsqlRawShape>}> = {
@@ -36,6 +36,22 @@ export class ZsqlSchema<T extends AnySchema> {
       table.bindDb(db);
     });
     return this;
+  }
+
+  /**
+   * return the DDL for this entire schema
+   */
+  ddl() {
+    if (!this.db) throw new NoDatabaseFound();
+    const out = [] as Compilable[];
+    let ddlApi: typeof this.db.schema;
+    if (this._name) {
+      out.push(this.db.schema.createSchema(this._name).ifNotExists());
+      ddlApi = this.db.schema.withSchema(this._name);
+    } else ddlApi = this.db.schema;
+    objItems(this.tables).forEach(([_, table]) => {
+      out.push(table.createTable());
+    });
   }
 
   getDb() {

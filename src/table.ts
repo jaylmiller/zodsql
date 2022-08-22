@@ -32,23 +32,22 @@ export class ZsqlTable<
   T extends ZsqlRawShape,
   UnknownKeys extends UnknownKeysParam = 'strip',
   Catchall extends z.ZodTypeAny = z.ZodTypeAny,
-  Output = z.objectOutputType<T, Catchall>,
-  Input = z.objectInputType<T, Catchall>
-  // a table should ahve less flexibility than the ZodObject so we extend the root type
+  O = z.objectOutputType<T, Catchall>,
+  I = z.objectInputType<T, Catchall>
+  // a table should have less flexibility than the ZodObject so we extend the root type
   // and just use the parser from ZodObject
-> extends z.ZodType<Output, z.ZodObjectDef<T, UnknownKeys, Catchall>, Input> {
+> extends z.ZodType<O, z.ZodObjectDef<T, UnknownKeys, Catchall>, I> {
   /**
-   * get DDL for table
-   * @param db the database api object
+   * get create table DDL
    */
-  ddl(opts?: {pkNameFn: PrimaryKeyNameFn}) {
+  createTable(opts?: {pkNameFn: PrimaryKeyNameFn}) {
     if (!this.db) throw new NoDatabaseFound();
-    const {name, schema} = this.__table;
+
     const pkNameFn = opts?.pkNameFn || defaultPkNameGen;
     const pks = this.__cols.filter(c => c.primaryKey);
     let stmt: CreateTableBuilder<string, string> = (
-      schema ? this.db.schema.withSchema(schema) : this.db.schema
-    ).createTable(this.__table.name);
+      this.schema ? this.db.schema.withSchema(this.schema) : this.db.schema
+    ).createTable(this.name);
 
     for (let coldef of this.__cols) {
       stmt = stmt.addColumn(coldef.name, coldef.dataType, col => {
@@ -59,19 +58,21 @@ export class ZsqlTable<
     }
     if (pks.length > 0)
       stmt = stmt.addPrimaryKeyConstraint(
-        pkNameFn(name, pks),
+        pkNameFn(this.name, pks),
         pks.map(c => c.name)
       );
     return stmt;
   }
 
   /**
-   * works like zod.parse except it generates an executable insert statement after
+   * generate an insert statement from data
    */
-  async insert(d: any) {
+  insert(d: O | Array<O>) {
     if (!this.db) throw new NoDatabaseFound();
-    const parsed = this.parse(d);
-    return this.db.insertInto(this.__table.name);
+    const parsed = Array.isArray(d)
+      ? d.map(p => this.parse(p))
+      : [this.parse(d)];
+    return this.db.insertInto(this.name).values(parsed);
   }
 
   /**
@@ -87,13 +88,13 @@ export class ZsqlTable<
    * Avoid using this outside of tests. Intended use is via the schema objects.
    * @returns
    */
-  getDb(): Kysely<{}> {
+  getDb(): Kysely<any> {
     if (!this.db) throw new NoDatabaseFound();
     return this.db;
   }
-
+  name!: string;
+  schema?: string;
   private db?: Kysely<any>;
-  private __table!: TableParams;
   private __cols!: Array<ColumnData & {name: string}>;
   _initShape!: T;
   // need this so that the zod object parser will work
@@ -128,7 +129,8 @@ export class ZsqlTable<
       return {...coldata, name: k};
     });
     newInst._cached = null;
-    newInst.__table = {name, schema};
+    newInst.name = name;
+    newInst.schema = schema;
     newInst.db = db;
     return newInst;
   }
@@ -151,7 +153,8 @@ export class ZsqlTable<
    */
   _getSqlData() {
     return {
-      ...this.__table,
+      name: this.name,
+      schema: this.schema,
       cols: this.__cols
     };
   }
