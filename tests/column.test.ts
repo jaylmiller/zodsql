@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { z, ZodEffects } from 'zod';
-import { Columns, ZsqlColumnOptional, ZsqlColumn } from '../src/ddl/column';
+import { Columns, ZsqlColumnOptional, ZsqlColumn } from '../src/column';
 type TypesAreEqual2<T, U> = [T] extends [U]
   ? [U] extends [T]
     ? any

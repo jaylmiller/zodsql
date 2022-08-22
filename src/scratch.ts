@@ -11,14 +11,14 @@ export const addProps = <T extends object, K extends string, V>(
   base: T,
   propertyNames: K[],
   propertyVals: V[]
-): T & { [p in K]: V } => {
+): T & {[p in K]: V} => {
   assert(propertyNames.length === propertyVals.length);
   const sourceObj = propertyNames.reduce(
     (acc, cur, idx) => ({
       ...acc,
       [cur]: propertyVals[idx]
     }),
-    {} as { [p in K]: V }
+    {} as {[p in K]: V}
   );
   return Object.assign(base, sourceObj);
 };
@@ -27,7 +27,7 @@ export const addProp = <T extends object, K extends string, V>(
   base: T,
   propertyName: K,
   propertyVal: V
-): T & { [p in K]: V } =>
-  Object.assign<T, { [p in K]: V }>(base, {
+): T & {[p in K]: V} =>
+  Object.assign<T, {[p in K]: V}>(base, {
     [propertyName]: propertyVal
-  } as { [p in K]: V });
+  } as {[p in K]: V});

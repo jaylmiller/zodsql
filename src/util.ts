@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { z } from 'zod';
+import {z} from 'zod';
 
 /**
  * compile time type assertions for dev stuff
@@ -22,7 +22,7 @@ export const objItems = <T extends object>(
  * just a typesafe wrapper around a reduce that allows us to do a dict comprehension type
  * pattern without doing the big reduce pattern every time
  */
-export const objMap = <C, I extends { [k: string]: C }, O>(
+export const objMap = <C, I extends {[k: string]: C}, O>(
   obj: I,
   fn: (arg: C) => O
 ): {
@@ -60,15 +60,15 @@ export type RawCreateParams =
   | undefined;
 export function processCreateParams(params: any) {
   if (!params) return {};
-  const { errorMap, invalid_type_error, required_error, description } = params;
+  const {errorMap, invalid_type_error, required_error, description} = params;
   if (errorMap && (invalid_type_error || required_error)) {
     throw new Error(
       `Can't use "invalid" or "required" in conjunction with custom error map.`
     );
   }
-  if (errorMap) return { errorMap: errorMap, description };
+  if (errorMap) return {errorMap: errorMap, description};
   const customMap = (iss: any, ctx: any) => {
-    if (iss.code !== 'invalid_type') return { message: ctx.defaultError };
+    if (iss.code !== 'invalid_type') return {message: ctx.defaultError};
     if (typeof ctx.data === 'undefined') {
       return {
         message:
@@ -84,7 +84,7 @@ export function processCreateParams(params: any) {
           : ctx.defaultError
     };
   };
-  return { errorMap: customMap, description };
+  return {errorMap: customMap, description};
 }
 
 /**

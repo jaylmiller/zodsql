@@ -1,12 +1,12 @@
 import assert from 'assert';
-import { ColumnDataType, sql } from 'kysely';
-import { z } from 'zod';
+import {ColumnDataType, sql} from 'kysely';
+import {z} from 'zod';
 import {
   addIssueToContext,
   INVALID,
   processCreateParams,
   RawCreateParams
-} from '../util';
+} from './util';
 
 export type ColumnData = {
   dataType: ColumnDataType;
@@ -27,7 +27,7 @@ export abstract class ZsqlColumn<
   Input = Output
 > extends z.ZodType<Output, Def, Input> {
   // zod types are non-optional by default
-  protected __colData: Omit<ColumnData, 'dataType'> = { required: true };
+  protected __colData: Omit<ColumnData, 'dataType'> = {required: true};
   sqlType!: ColumnDataType;
   zodType!: ClassConstructor<z.ZodType<Output, Def, Input>>;
   _getColData(): ColumnData {
@@ -65,7 +65,7 @@ export abstract class ZsqlColumn<
     });
     // copy our extra data to new object
     newInst.sqlType = this.sqlType;
-    newInst.__colData = { ...this.__colData };
+    newInst.__colData = {...this.__colData};
     return newInst;
   }
 
@@ -100,7 +100,7 @@ export class ZsqlColumnOptional<T extends z.ZodTypeAny> extends ZsqlColumn<
       parsedType === z.ZodParsedType.undefined ||
       parsedType === z.ZodParsedType.null
     ) {
-      return { status: 'valid', value: undefined };
+      return {status: 'valid', value: undefined};
     }
     return this._def.innerType._parse(input);
   }
