@@ -1,31 +1,42 @@
 import assert from 'assert';
 import { ColumnDataType, sql } from 'kysely';
-import { any, z, ZodType } from 'zod';
+import { z } from 'zod';
 import {
-  addProp,
-  processCreateParams,
-  INVALID,
   addIssueToContext,
-  objItems
+  INVALID,
+  processCreateParams,
+  RawCreateParams
 } from '../util';
 
-export interface ColumnDef {
+export type ColumnData = {
   dataType: ColumnDataType;
   required?: boolean;
   primaryKey?: boolean;
   unique?: boolean;
   // default calculated server-side: pass in raw sql value with the template literal
   defaultVal?: ReturnType<typeof sql>;
-}
+};
+
+type ClassConstructor<T> = {
+  new (...args: any[]): T;
+};
 
 export abstract class ZsqlColumn<
   Output = any,
   Def extends z.ZodTypeDef = z.ZodTypeDef,
   Input = Output
 > extends z.ZodType<Output, Def, Input> {
-  protected __colData: Omit<ColumnDef, 'dataType'> = { required: true };
+  // zod types are non-optional by default
+  protected __colData: Omit<ColumnData, 'dataType'> = { required: true };
   sqlType!: ColumnDataType;
-
+  zodType!: ClassConstructor<z.ZodType<Output, Def, Input>>;
+  _getColData(): ColumnData {
+    assert(this.sqlType);
+    return {
+      ...this.__colData,
+      dataType: this.sqlType
+    };
+  }
   optional(): ZsqlColumnOptional<this> {
     if (this.__colData.primaryKey)
       throw new Error('PK columns cannot be optional');
@@ -36,7 +47,18 @@ export abstract class ZsqlColumn<
     return newCol;
   }
 
-  private copySelf(): this {
+  /**
+   * runs the base zod parser. e.g. for ZsqlString run the ZodString _parse
+   */
+  _zodParser(input: z.ParseInput): z.ParseReturnType<Output> {
+    return this.zodType.prototype._parse.call(this, input);
+  }
+
+  /**
+   * creates a new instance of this class with the same data
+   * @returns
+   */
+  copySelf(): this {
     // zod internal data is storede in _def
     const newInst = new (Object.getPrototypeOf(this).constructor)({
       ...this._def
@@ -45,14 +67,6 @@ export abstract class ZsqlColumn<
     newInst.sqlType = this.sqlType;
     newInst.__colData = { ...this.__colData };
     return newInst;
-  }
-
-  _getColData(): ColumnDef {
-    assert(this.sqlType);
-    return {
-      ...this.__colData,
-      dataType: this.sqlType
-    };
   }
 
   serverDefault(rawSql: ReturnType<typeof sql>) {
@@ -102,21 +116,14 @@ export class ZsqlColumnOptional<T extends z.ZodTypeAny> extends ZsqlColumn<
   }
 }
 
-type RawCreateParams =
-  | {
-      errorMap?: z.ZodErrorMap;
-      invalid_type_error?: string;
-      required_error?: string;
-      description?: string;
-    }
-  | undefined;
-
 export class ZsqlString extends ZsqlColumn<string, z.ZodStringDef> {
   sqlType: ColumnDataType = 'text';
-  _parse(input: z.ParseInput): z.ParseReturnType<any> {
-    const t = this;
-    return z.ZodString.prototype._parse.call(this, input);
+  zodType = z.ZodString;
+
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
+    return this._zodParser(input);
   }
+
   static create(params?: RawCreateParams) {
     return new ZsqlString({
       checks: [],
@@ -128,7 +135,8 @@ export class ZsqlString extends ZsqlColumn<string, z.ZodStringDef> {
 
 class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'integer';
-  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+  zodType = z.ZodNumber;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
     // custom parse
     if (!Number.isInteger(input.data)) {
       const ctx = this._getOrReturnCtx(input);
@@ -139,9 +147,8 @@ class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
       });
       return INVALID;
     }
-
     // then use zods parser
-    return z.ZodNumber.prototype._parse.call(this, input);
+    return this._zodParser(input);
   }
 
   static create(params?: RawCreateParams) {
@@ -153,22 +160,13 @@ class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
   }
 }
 
-class ZsqlDateObj extends ZsqlColumn<Date, z.ZodDateDef> {
-  _parse(input: z.ParseInput): z.ParseReturnType<any> {
-    // custom parse
-    return z.ZodDate.prototype._parse.call(this, input);
-  }
-  static create(params?: RawCreateParams) {
-    return new ZsqlDateObj({
-      checks: [],
-      typeName: z.ZodFirstPartyTypeKind.ZodDate,
-      ...processCreateParams(params)
-    } as z.ZodDateDef);
-  }
-}
 // TODO: not sure how to differentiate dates and timestamps client side
-class ZsqlTimestamp extends ZsqlDateObj {
+class ZsqlTimestamp extends ZsqlColumn<Date, z.ZodDateDef> {
   sqlType: ColumnDataType = 'timestamp';
+  zodType = z.ZodDate;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
+    return this._zodParser(input);
+  }
   static create(params?: RawCreateParams) {
     return new ZsqlTimestamp({
       checks: [],
@@ -177,8 +175,12 @@ class ZsqlTimestamp extends ZsqlDateObj {
     } as z.ZodDateDef);
   }
 }
-class ZsqlDate extends ZsqlDateObj {
+class ZsqlDate extends ZsqlColumn<Date, z.ZodDateDef> {
   sqlType: ColumnDataType = 'date';
+  zodType = z.ZodDate;
+  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+    return this._zodParser(input);
+  }
   static create(params?: RawCreateParams) {
     return new ZsqlDate({
       checks: [],
@@ -190,18 +192,21 @@ class ZsqlDate extends ZsqlDateObj {
 
 class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'numeric';
-  _parse(input: z.ParseInput): z.ParseReturnType<any> {
-    // custom parse
+  zodType = z.ZodNumber;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
+    // not sure if we even need this but feel like it should do some sort
+    // of client validation here lol
     if (!Number.isFinite(input.data)) {
       const ctx = this._getOrReturnCtx(input);
       addIssueToContext(ctx, {
         code: z.ZodIssueCode.invalid_type,
-        expected: z.ZodParsedType.integer,
+        expected: z.ZodParsedType.float,
         received: ctx.parsedType
       });
       return INVALID;
     }
-    return z.ZodNumber.prototype._parse.call(this, input);
+    // zod parser
+    return this._zodParser(input);
   }
 
   static create(params?: RawCreateParams) {
@@ -213,9 +218,25 @@ class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
   }
 }
 
+class ZsqlBigInt extends ZsqlColumn<BigInt, z.ZodBigIntDef> {
+  sqlType: ColumnDataType = 'bigint';
+  zodType = z.ZodBigInt;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
+    return this._zodParser(input);
+  }
+
+  static create(params?: RawCreateParams) {
+    return new ZsqlBigInt({
+      typeName: z.ZodFirstPartyTypeKind.ZodBigInt,
+      ...processCreateParams(params)
+    } as z.ZodBigIntDef);
+  }
+}
+
 class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
   sqlType: ColumnDataType = 'binary';
-  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+  zodType = z.ZodAny;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
     if (!(input.data instanceof Buffer)) {
       const ctx = this._getOrReturnCtx(input);
       addIssueToContext(ctx, {
@@ -241,6 +262,20 @@ class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
   }
 }
 
+export class ZsqlAny extends ZsqlColumn<any, z.ZodAnyDef> {
+  zodType = z.ZodAny;
+  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
+    return this._zodParser(input);
+  }
+
+  static create(params?: RawCreateParams) {
+    return new ZsqlAny({
+      typeName: z.ZodFirstPartyTypeKind.ZodAny,
+      ...processCreateParams(params)
+    } as z.ZodAnyDef);
+  }
+}
+
 export namespace Columns {
   export const text = ZsqlString.create;
   export const int = ZsqlInt.create;
@@ -248,4 +283,5 @@ export namespace Columns {
   export const date = ZsqlDate.create;
   export const timestamp = ZsqlTimestamp.create;
   export const binary = ZsqlBin.create;
+  export const bigint = ZsqlBigInt.create;
 }

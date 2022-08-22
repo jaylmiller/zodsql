@@ -1,5 +1,10 @@
 import assert from 'assert';
 import { z } from 'zod';
+
+/**
+ * compile time type assertions for dev stuff
+ */
+export const expectType = <T>(_: T): void => void 0;
 /**
  * Get key value pairs of an object, like python's dict.items
  * @param obj
@@ -14,36 +19,25 @@ export const objItems = <T extends object>(
   });
 
 /**
- * Adds a new property to the base object and returns it.
- * @param base
- * @param propertyName
- * @param propertyVal
- * @returns
+ * just a typesafe wrapper around a reduce that allows us to do a dict comprehension type
+ * pattern without doing the big reduce pattern every time
  */
-export const addProps = <T extends object, K extends string, V>(
-  base: T,
-  propertyNames: K[],
-  propertyVals: V[]
-): T & { [p in K]: V } => {
-  assert(propertyNames.length === propertyVals.length);
-  const sourceObj = propertyNames.reduce(
-    (acc, cur, idx) => ({
+export const objMap = <C, I extends { [k: string]: C }, O>(
+  obj: I,
+  fn: (arg: C) => O
+): {
+  [K in keyof I]: I[K];
+} => {
+  return objItems(obj).reduce(
+    (acc, [k, v]) => ({
       ...acc,
-      [cur]: propertyVals[idx]
+      [k]: fn(v)
     }),
-    {} as { [p in K]: V }
+    {} as {
+      [K in keyof I]: I[K];
+    }
   );
-  return Object.assign(base, sourceObj);
 };
-
-export const addProp = <T extends object, K extends string, V>(
-  base: T,
-  propertyName: K,
-  propertyVal: V
-): T & { [p in K]: V } =>
-  Object.assign<T, { [p in K]: V }>(base, {
-    [propertyName]: propertyVal
-  } as { [p in K]: V });
 
 export function keyIsProp<O extends object>(
   key: string | number | symbol,
@@ -51,13 +45,19 @@ export function keyIsProp<O extends object>(
 ): asserts key is keyof O {
   assert(Object.keys(obj).includes(key as any));
 }
-
 /**
  * CODE BELOW IS COPIED DIRECTLY FROM ZOD SOURCE.
  * (i.e. they were not exported by the package but we need them)
  */
 
-// copied from zod source code since it wasnt exported anywhere
+export type RawCreateParams =
+  | {
+      errorMap?: z.ZodErrorMap;
+      invalid_type_error?: string;
+      required_error?: string;
+      description?: string;
+    }
+  | undefined;
 export function processCreateParams(params: any) {
   if (!params) return {};
   const { errorMap, invalid_type_error, required_error, description } = params;

@@ -3,7 +3,7 @@
     "target": "es6",
     "module": "commonjs",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "./src",
     "sourceMap": true,
     "types": ["node", "mocha"],
     
@@ -30,6 +30,7 @@
     /* Experimental Options */
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-
-  }
+    
+  },
+  "exclude": ["tests/**/*"]
 }
