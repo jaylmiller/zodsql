@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test:unit": "mocha --config .mocharc.js tests/**/*.test.ts",
+    "test": "mocha --config .mocharc.js tests/**/*.test.ts",
     "build": "tsc"
   },
   "keywords": [],

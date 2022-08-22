@@ -1,14 +1,15 @@
+import assert from 'assert';
 import { ColumnDataType, sql } from 'kysely';
 import { any, z, ZodType } from 'zod';
 import {
   addProp,
   processCreateParams,
   INVALID,
-  addIssueToContext
+  addIssueToContext,
+  objItems
 } from '../util';
 
 export interface ColumnDef {
-  name: string;
   dataType: ColumnDataType;
   required?: boolean;
   primaryKey?: boolean;
@@ -17,46 +18,74 @@ export interface ColumnDef {
   defaultVal?: ReturnType<typeof sql>;
 }
 
-abstract class ZodColumn<
+export abstract class ZsqlColumn<
   Output = any,
   Def extends z.ZodTypeDef = z.ZodTypeDef,
   Input = Output
 > extends z.ZodType<Output, Def, Input> {
-  // abstract class ZodColumn extends z.ZodType {
-  _colData: Omit<ColumnDef, 'name' | 'dataType'> = { required: true };
+  protected __colData: Omit<ColumnDef, 'dataType'> = { required: true };
   sqlType!: ColumnDataType;
 
-  public optional(): ZodColumnOptional<this> {
-    if (this._colData.primaryKey)
+  optional(): ZsqlColumnOptional<this> {
+    if (this.__colData.primaryKey)
       throw new Error('PK columns cannot be optional');
-    this._colData.required = false;
-    return ZodColumnOptional.create(this);
+    this.__colData.required = false;
+    const newCol = ZsqlColumnOptional.create(this);
+    newCol.__colData = this.__colData;
+    newCol.sqlType = this.sqlType;
+    return newCol;
   }
 
-  public serverDefault(rawSql: ReturnType<typeof sql>) {
-    this._colData.defaultVal = rawSql;
-    return this;
+  private copySelf(): this {
+    // zod internal data is storede in _def
+    const newInst = new (Object.getPrototypeOf(this).constructor)({
+      ...this._def
+    });
+    // copy our extra data to new object
+    newInst.sqlType = this.sqlType;
+    newInst.__colData = { ...this.__colData };
+    return newInst;
   }
 
-  public unique() {
-    this._colData.unique = true;
-    return this;
+  _getColData(): ColumnDef {
+    assert(this.sqlType);
+    return {
+      ...this.__colData,
+      dataType: this.sqlType
+    };
   }
 
-  public primaryKey() {
-    this._colData.primaryKey = true;
-    return this;
+  serverDefault(rawSql: ReturnType<typeof sql>) {
+    const newobj = this.copySelf();
+    newobj.__colData.defaultVal = rawSql;
+    return newobj;
+  }
+
+  unique() {
+    const newobj = this.copySelf();
+    newobj.__colData.unique = true;
+    return newobj;
+  }
+
+  primaryKey() {
+    const newobj = this.copySelf();
+    newobj.__colData.primaryKey = true;
+    return newobj;
   }
 }
 
-export class ZodColumnOptional<T extends z.ZodTypeAny> extends ZodColumn<
+export class ZsqlColumnOptional<T extends z.ZodTypeAny> extends ZsqlColumn<
   T['_output'] | undefined,
   z.ZodOptionalDef<T>,
   T['_input']
 > {
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
     const parsedType = this._getType(input);
-    if (parsedType === z.ZodParsedType.undefined) {
+    // treat null and undefined the same since SQL does
+    if (
+      parsedType === z.ZodParsedType.undefined ||
+      parsedType === z.ZodParsedType.null
+    ) {
       return { status: 'valid', value: undefined };
     }
     return this._def.innerType._parse(input);
@@ -65,7 +94,7 @@ export class ZodColumnOptional<T extends z.ZodTypeAny> extends ZodColumn<
     return this._def.innerType;
   }
   static create<T_1 extends z.ZodTypeAny>(type: T_1, params?: RawCreateParams) {
-    return new ZodColumnOptional({
+    return new ZsqlColumnOptional({
       innerType: type,
       typeName: z.ZodFirstPartyTypeKind.ZodOptional,
       ...processCreateParams(params)
@@ -82,14 +111,14 @@ type RawCreateParams =
     }
   | undefined;
 
-export class StringCol extends ZodColumn<ZodType<string, z.ZodStringDef>> {
+export class ZsqlString extends ZsqlColumn<string, z.ZodStringDef> {
   sqlType: ColumnDataType = 'text';
   _parse(input: z.ParseInput): z.ParseReturnType<any> {
     const t = this;
     return z.ZodString.prototype._parse.call(this, input);
   }
   static create(params?: RawCreateParams) {
-    return new StringCol({
+    return new ZsqlString({
       checks: [],
       typeName: z.ZodFirstPartyTypeKind.ZodString,
       ...processCreateParams(params)
@@ -97,7 +126,7 @@ export class StringCol extends ZodColumn<ZodType<string, z.ZodStringDef>> {
   }
 }
 
-class IntCol extends ZodColumn<ZodType<number, z.ZodNumberDef>> {
+class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'integer';
   _parse(input: z.ParseInput): z.ParseReturnType<any> {
     // custom parse
@@ -116,7 +145,7 @@ class IntCol extends ZodColumn<ZodType<number, z.ZodNumberDef>> {
   }
 
   static create(params?: RawCreateParams) {
-    return new IntCol({
+    return new ZsqlInt({
       checks: [],
       typeName: z.ZodFirstPartyTypeKind.ZodNumber,
       ...processCreateParams(params)
@@ -124,21 +153,59 @@ class IntCol extends ZodColumn<ZodType<number, z.ZodNumberDef>> {
   }
 }
 
-class NumericCol extends ZodColumn {
+class ZsqlDateObj extends ZsqlColumn<Date, z.ZodDateDef> {
+  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+    // custom parse
+    return z.ZodDate.prototype._parse.call(this, input);
+  }
+  static create(params?: RawCreateParams) {
+    return new ZsqlDateObj({
+      checks: [],
+      typeName: z.ZodFirstPartyTypeKind.ZodDate,
+      ...processCreateParams(params)
+    } as z.ZodDateDef);
+  }
+}
+// TODO: not sure how to differentiate dates and timestamps client side
+class ZsqlTimestamp extends ZsqlDateObj {
+  sqlType: ColumnDataType = 'timestamp';
+  static create(params?: RawCreateParams) {
+    return new ZsqlTimestamp({
+      checks: [],
+      typeName: z.ZodFirstPartyTypeKind.ZodDate,
+      ...processCreateParams(params)
+    } as z.ZodDateDef);
+  }
+}
+class ZsqlDate extends ZsqlDateObj {
+  sqlType: ColumnDataType = 'date';
+  static create(params?: RawCreateParams) {
+    return new ZsqlDate({
+      checks: [],
+      typeName: z.ZodFirstPartyTypeKind.ZodDate,
+      ...processCreateParams(params)
+    } as z.ZodDateDef);
+  }
+}
+
+class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'numeric';
   _parse(input: z.ParseInput): z.ParseReturnType<any> {
     // custom parse
-    if (!Number.isFinite(input.data))
-      return {
-        status: 'dirty',
-        value: input.data
-      };
-    // then use zods parser
+    if (!Number.isFinite(input.data)) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        code: z.ZodIssueCode.invalid_type,
+        expected: z.ZodParsedType.integer,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
     return z.ZodNumber.prototype._parse.call(this, input);
   }
 
   static create(params?: RawCreateParams) {
-    return new IntCol({
+    return new ZsqlNumeric({
       checks: [],
       typeName: z.ZodFirstPartyTypeKind.ZodNumber,
       ...processCreateParams(params)
@@ -146,81 +213,39 @@ class NumericCol extends ZodColumn {
   }
 }
 
-export namespace Columns {
-  export const text = StringCol.create;
-  export const int = IntCol.create;
-  //   const s = z.string();
-  //   const p1 = addProp(s, '_colData', {});
-  //   const p2 = addProp(p1, 'primaryKey', (() => this).bind(p1));
-  // };
+class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
+  sqlType: ColumnDataType = 'binary';
+  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+    if (!(input.data instanceof Buffer)) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext(ctx, {
+        message: 'expected data to be instanceof Buffer',
+        code: z.ZodIssueCode.invalid_type,
+        // TODO: not sure what this should be
+        expected: z.ZodParsedType.unknown,
+        received: ctx.parsedType
+      });
+      return INVALID;
+    }
+    return {
+      status: 'valid',
+      value: input.data
+    };
+  }
+
+  static create(params?: RawCreateParams) {
+    return new ZsqlBin({
+      typeName: z.ZodFirstPartyTypeKind.ZodAny,
+      ...processCreateParams(params)
+    } as z.ZodAnyDef);
+  }
 }
 
-// type ZodCol<T extends z.ZodType> = T & AddedColData;
-
-// type ZodColOpti<T extends z.ZodType> = z.ZodOptional<T> & AddedColData;
-// // type ZodColFunc<T extends z.ZodType> = (colDef?: ColArgs) => ZodCol<T>;
-// // type ZodColFuncOpti<T extends z.ZodType> = (colDef?: ColArgs) => ZodColOpti<T>;
-
-// // const _genColFn =
-// //   <T extends z.ZodType>(zf: T, sqlType: ColumnDataType): ZodColFunc<T> =>
-// //   (colDef: ColArgs = {}) =>
-// //     addProp(
-// //       !colDef.required ? z.optional(zf) : zf,
-// //       'colDef' as keyof AddedColData,
-// //       { ...colDef, dataType: sqlType } as ColumnDef
-// //     );
-
-// const _genColFn =
-//   <T extends z.ZodType>(zf: T, sqlType: ColumnDataType) =>
-//   (colDef: ColArgs) => {
-//     if (tg(zf, colDef)) {
-//       return addProp(
-//         zf,
-//         'colDef' as keyof AddedColData,
-//         { ...colDef, dataType: sqlType } as AddedColData['colDef']
-//       );
-//     }
-//     if (colDef['required'] === true || colDef['primaryKey'] === true) {
-//       return addProp(
-//         zf,
-//         'colDef' as keyof AddedColData,
-//         { ...colDef, dataType: sqlType } as AddedColData['colDef']
-//       );
-//     }
-//     return addProp(
-//       z.optional(zf),
-//       'colDef' as keyof AddedColData,
-//       { ...colDef, dataType: sqlType } as AddedColData['colDef']
-//     );
-//   };
-
-// export namespace Columns {
-//   export const text = (col: ColArgs) => {
-//     if (col.required)
-//       return addProp(
-//         z.string(),
-//         'colDef' as keyof AddedColData,
-//         { ...col, dataType: 'text' } as AddedColData['colDef']
-//       );
-//     return addProp(
-//       z.string().optional(),
-//       'colDef' as keyof AddedColData,
-//       { ...col, dataType: 'text' } as AddedColData['colDef']
-//     );
-//   };
-
-//   export const int = _genColFn(
-//     z.number().refine(v => Number.isInteger(v)),
-//     'integer'
-//   );
-
-//   export const binary = _genColFn(
-//     z.custom<Buffer>(data => {
-//       if (!(data instanceof Buffer)) {
-//         return false;
-//       }
-//       return true;
-//     }),
-//     'binary'
-//   );
-// }
+export namespace Columns {
+  export const text = ZsqlString.create;
+  export const int = ZsqlInt.create;
+  export const numeric = ZsqlNumeric.create;
+  export const date = ZsqlDate.create;
+  export const timestamp = ZsqlTimestamp.create;
+  export const binary = ZsqlBin.create;
+}
