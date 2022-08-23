@@ -1,15 +1,15 @@
 {
-  "name": "zodsql",
-  "version": "1.0.0",
+  "name": "zsql",
+  "version": "0.1.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/types/index.d.ts",
   "scripts": {
     "test": "mocha --config .mocharc.js tests/**/*.test.ts",
-    "build": "tsc"
+    "build": "rm -rf dist && tsc && tsc --emitDeclarationOnly --outDir dist/types --declaration"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Jay Miller",
+  "license": "MIT",
   "dependencies": {
     "kysely": "^0.21.4",
     "zod": "^3.18.0"

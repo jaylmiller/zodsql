@@ -1,6 +1,6 @@
 import assert from 'assert';
-import { z, ZodEffects } from 'zod';
-import { Columns, ZsqlColumnOptional, ZsqlColumn } from '../src/column';
+import {z, ZodEffects} from 'zod';
+import {Columns, ZsqlColumnOptional, ZsqlColumn} from '../src/column';
 type TypesAreEqual2<T, U> = [T] extends [U]
   ? [U] extends [T]
     ? any
@@ -42,10 +42,15 @@ const colTests = [
     c: Columns.bigint,
     good: BigInt('123485812351231235'),
     bad: ['a', 0, false]
+  },
+  {
+    c: Columns.bool,
+    good: true,
+    bad: ['a', 0, 0.1]
   }
 ];
 for (let d of colTests) {
-  const { c, good, bad } = d;
+  const {c, good, bad} = d;
   describe(`column: ${c().sqlType} (wraps: ${c().zodType.name})`, () => {
     it(`stores column data`, () => {
       const t = c().sqlType;
@@ -104,19 +109,16 @@ for (let d of colTests) {
     });
     it(`within object`, () => {
       const keys = ['k1', 'k2', 'k3'];
-      const o = z.object(
-        keys.reduce((acc, cur) => ({ ...acc, [cur]: c() }), {})
-      );
+      const o = z.object(keys.reduce((acc, cur) => ({...acc, [cur]: c()}), {}));
       const parsed = o.parse(
-        keys.reduce((acc, cur) => ({ ...acc, [cur]: good }), {})
+        keys.reduce((acc, cur) => ({...acc, [cur]: good}), {})
       ) as any;
       keys.forEach(k => {
         assert.deepEqual(parsed[k], good);
       });
 
       assert.throws(
-        () =>
-          o.parse(keys.reduce((acc, cur) => ({ ...acc, [cur]: bad[0] }), {})),
+        () => o.parse(keys.reduce((acc, cur) => ({...acc, [cur]: bad[0]}), {})),
         z.ZodError
       );
     });
@@ -153,6 +155,6 @@ it('typings work with object', () => {
   let stest: TypesAreEqual2<T['s'], string> = '1';
   let itest: TypesAreEqual2<T['i'], number> = '1';
   let sotest: TypesAreEqual2<T['so'], string | undefined> = '1';
-  const a = o.parse({ s: 'asdf', i: 1 });
-  assert.deepEqual(a, { s: 'asdf', i: 1 });
+  const a = o.parse({s: 'asdf', i: 1});
+  assert.deepEqual(a, {s: 'asdf', i: 1});
 });

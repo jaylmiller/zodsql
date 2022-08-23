@@ -56,19 +56,15 @@ describe('table', () => {
         assert(sqlData.cols[0].primaryKey);
         assert.equal(sqlData.cols[0].dataType, 'text');
         assert(!sqlData.cols[2].required);
-        const tschema = table(
-          {name: 'test', schema: 'testschema'},
-          {
-            a: Columns.text().primaryKey(),
-            b: Columns.int(),
-            c: Columns.binary().optional()
-          }
-        );
-        assert.equal(tschema._getSqlData().schema, 'testschema');
+        const tschema = table('test', {
+          a: Columns.text().primaryKey(),
+          b: Columns.int(),
+          c: Columns.binary().optional()
+        });
       });
 
       it('ddl', async () => {
-        const ddl = testTable.createTable();
+        const ddl = testTable.ddl();
         await ddl.execute();
         const db = testTable.getDb();
         const tables = await db.introspection.getTables();
@@ -80,14 +76,14 @@ describe('table', () => {
       });
 
       it('insert one', async () => {
-        await testTable.createTable().execute();
+        await testTable.ddl().execute();
         const stmt = testTable.insert({a: 'testy', b: 1, c: Buffer.alloc(1)});
         const res = await stmt.execute();
         return;
       });
 
       it('insert many', async () => {
-        await testTable.createTable().execute();
+        await testTable.ddl().execute();
         const stmt = testTable.insert([
           {a: 'testy', b: 1, c: Buffer.alloc(1)},
           {a: 'asdf', b: 3},

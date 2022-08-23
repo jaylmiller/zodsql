@@ -6,7 +6,6 @@
     "rootDir": "./src",
     "sourceMap": true,
     "types": ["node", "mocha"],
-    
     /* Strict Type-Checking Options */
     "noImplicitAny": true,
     "strict": true,

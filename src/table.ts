@@ -19,10 +19,18 @@ type UnknownKeysParam = 'passthrough' | 'strict' | 'strip';
 
 export type TableParams = {
   name: string;
-  // namespace
-  schema?: string;
+  // arbitrary options for custom use cases
+  // could be used to apply perms or other after table creation
+  extraOpts?: any;
 };
 
+/**
+ * generates the name of a primary key for a given table when generating it's ddl.
+ * can be overriden
+ * @param table
+ * @param pks
+ * @returns
+ */
 const defaultPkNameGen = (
   table: string,
   pks: Array<ColumnData & {name: string}>
@@ -37,18 +45,24 @@ export class ZsqlTable<
   // a table should have less flexibility than the ZodObject so we extend the root type
   // and just use the parser from ZodObject
 > extends z.ZodType<O, z.ZodObjectDef<T, UnknownKeys, Catchall>, I> {
+  name!: string;
+  columns!: T;
+  private db?: Kysely<any>;
+  // column data
+  private __cols!: Array<ColumnData & {name: string}>;
+  // only set by ZsqlSchema
+  __schema?: string;
   /**
    * get create table DDL
    */
-  createTable(opts?: {pkNameFn: PrimaryKeyNameFn}) {
+  ddl(opts?: {pkNameFn: PrimaryKeyNameFn}) {
     if (!this.db) throw new NoDatabaseFound();
 
     const pkNameFn = opts?.pkNameFn || defaultPkNameGen;
     const pks = this.__cols.filter(c => c.primaryKey);
     let stmt: CreateTableBuilder<string, string> = (
-      this.schema ? this.db.schema.withSchema(this.schema) : this.db.schema
+      this.__schema ? this.db.schema.withSchema(this.__schema) : this.db.schema
     ).createTable(this.name);
-
     for (let coldef of this.__cols) {
       stmt = stmt.addColumn(coldef.name, coldef.dataType, col => {
         if (coldef.required) col = col.notNull();
@@ -64,15 +78,20 @@ export class ZsqlTable<
     return stmt;
   }
 
+  private _getQueryBuilder() {
+    if (!this.db) throw new NoDatabaseFound();
+    return this.__schema ? this.db.withSchema(this.__schema) : this.db;
+  }
+
   /**
    * generate an insert statement from data
    */
   insert(d: O | Array<O>) {
-    if (!this.db) throw new NoDatabaseFound();
+    const db = this._getQueryBuilder();
     const parsed = Array.isArray(d)
       ? d.map(p => this.parse(p))
       : [this.parse(d)];
-    return this.db.insertInto(this.name).values(parsed);
+    return db.insertInto(this.name).values(parsed);
   }
 
   /**
@@ -92,11 +111,7 @@ export class ZsqlTable<
     if (!this.db) throw new NoDatabaseFound();
     return this.db;
   }
-  name!: string;
-  schema?: string;
-  private db?: Kysely<any>;
-  private __cols!: Array<ColumnData & {name: string}>;
-  _initShape!: T;
+
   // need this so that the zod object parser will work
   private _cached: {shape: T; keys: string[]} | null = null;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -110,10 +125,10 @@ export class ZsqlTable<
     shape: T,
     params?: RawCreateParams
   ): ZsqlTable<T> {
-    const {name, schema, db} =
+    const {name, extraOpts, db} =
       typeof tableParams === 'object'
         ? tableParams
-        : {name: tableParams, db: undefined, schema: undefined};
+        : {name: tableParams, db: undefined, extraOpts: undefined};
 
     const newInst = new ZsqlTable({
       shape: () => shape,
@@ -122,7 +137,7 @@ export class ZsqlTable<
       typeName: z.ZodFirstPartyTypeKind.ZodObject,
       ...processCreateParams(params)
     });
-    newInst._initShape = shape;
+    newInst.columns = shape;
     newInst.__cols = objItems(shape).map(([k, v]) => {
       assert(typeof k === 'string');
       const coldata = v._getColData();
@@ -130,7 +145,6 @@ export class ZsqlTable<
     });
     newInst._cached = null;
     newInst.name = name;
-    newInst.schema = schema;
     newInst.db = db;
     return newInst;
   }
@@ -154,7 +168,6 @@ export class ZsqlTable<
   _getSqlData() {
     return {
       name: this.name,
-      schema: this.schema,
       cols: this.__cols
     };
   }

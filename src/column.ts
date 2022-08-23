@@ -25,6 +25,7 @@ export abstract class ZsqlColumn<
   Output = any,
   Def extends z.ZodTypeDef = z.ZodTypeDef,
   Input = Output
+  // ColData extends Omit<ColumnData, 'dataType'> =
 > extends z.ZodType<Output, Def, Input> {
   // zod types are non-optional by default
   protected __colData: Omit<ColumnData, 'dataType'> = {required: true};
@@ -133,7 +134,7 @@ export class ZsqlString extends ZsqlColumn<string, z.ZodStringDef> {
   }
 }
 
-class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
+export class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'integer';
   zodType = z.ZodNumber;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -161,7 +162,7 @@ class ZsqlInt extends ZsqlColumn<number, z.ZodNumberDef> {
 }
 
 // TODO: not sure how to differentiate dates and timestamps client side
-class ZsqlTimestamp extends ZsqlColumn<Date, z.ZodDateDef> {
+export class ZsqlTimestamp extends ZsqlColumn<Date, z.ZodDateDef> {
   sqlType: ColumnDataType = 'timestamp';
   zodType = z.ZodDate;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -175,7 +176,7 @@ class ZsqlTimestamp extends ZsqlColumn<Date, z.ZodDateDef> {
     } as z.ZodDateDef);
   }
 }
-class ZsqlDate extends ZsqlColumn<Date, z.ZodDateDef> {
+export class ZsqlDate extends ZsqlColumn<Date, z.ZodDateDef> {
   sqlType: ColumnDataType = 'date';
   zodType = z.ZodDate;
   _parse(input: z.ParseInput): z.ParseReturnType<any> {
@@ -189,8 +190,21 @@ class ZsqlDate extends ZsqlColumn<Date, z.ZodDateDef> {
     } as z.ZodDateDef);
   }
 }
+export class ZsqlBool extends ZsqlColumn<boolean, z.ZodBooleanDef> {
+  sqlType: ColumnDataType = 'boolean';
+  zodType = z.ZodBoolean;
+  _parse(input: z.ParseInput): z.ParseReturnType<any> {
+    return this._zodParser(input);
+  }
+  static create(params?: RawCreateParams) {
+    return new ZsqlBool({
+      typeName: z.ZodFirstPartyTypeKind.ZodBoolean,
+      ...processCreateParams(params)
+    } as z.ZodBooleanDef);
+  }
+}
 
-class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
+export class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
   sqlType: ColumnDataType = 'numeric';
   zodType = z.ZodNumber;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -218,7 +232,7 @@ class ZsqlNumeric extends ZsqlColumn<number, z.ZodNumberDef> {
   }
 }
 
-class ZsqlBigInt extends ZsqlColumn<BigInt, z.ZodBigIntDef> {
+export class ZsqlBigInt extends ZsqlColumn<BigInt, z.ZodBigIntDef> {
   sqlType: ColumnDataType = 'bigint';
   zodType = z.ZodBigInt;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -233,7 +247,7 @@ class ZsqlBigInt extends ZsqlColumn<BigInt, z.ZodBigIntDef> {
   }
 }
 
-class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
+export class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
   sqlType: ColumnDataType = 'binary';
   zodType = z.ZodAny;
   _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
@@ -262,20 +276,6 @@ class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
   }
 }
 
-export class ZsqlAny extends ZsqlColumn<any, z.ZodAnyDef> {
-  zodType = z.ZodAny;
-  _parse(input: z.ParseInput): z.ParseReturnType<this['_output']> {
-    return this._zodParser(input);
-  }
-
-  static create(params?: RawCreateParams) {
-    return new ZsqlAny({
-      typeName: z.ZodFirstPartyTypeKind.ZodAny,
-      ...processCreateParams(params)
-    } as z.ZodAnyDef);
-  }
-}
-
 export namespace Columns {
   export const text = ZsqlString.create;
   export const int = ZsqlInt.create;
@@ -284,4 +284,5 @@ export namespace Columns {
   export const timestamp = ZsqlTimestamp.create;
   export const binary = ZsqlBin.create;
   export const bigint = ZsqlBigInt.create;
+  export const bool = ZsqlBool.create;
 }
