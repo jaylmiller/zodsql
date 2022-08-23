@@ -1,6 +1,6 @@
 import assert from 'assert';
 import {z, ZodEffects} from 'zod';
-import {Columns, ZsqlColumnOptional, ZsqlColumn} from '../src/column';
+import {columns, ZsqlColumnOptional, ZsqlColumn} from '../src/column';
 type TypesAreEqual2<T, U> = [T] extends [U]
   ? [U] extends [T]
     ? any
@@ -9,42 +9,42 @@ type TypesAreEqual2<T, U> = [T] extends [U]
 const ser = (o: any) => JSON.parse(JSON.stringify(o));
 const colTests = [
   {
-    c: Columns.text,
+    c: columns.text,
     good: 'asdf',
     bad: [1, true, 0.1]
   },
   {
-    c: Columns.int,
+    c: columns.int,
     good: 1,
     bad: ['a', true, 0.5]
   },
   {
-    c: Columns.numeric,
+    c: columns.numeric,
     good: 0.1,
     bad: ['asdf', true]
   },
   {
-    c: Columns.timestamp,
+    c: columns.timestamp,
     good: new Date('1970-01-01'),
     bad: ['asdfasdf', 1, false]
   },
   {
-    c: Columns.date,
+    c: columns.date,
     good: new Date('1970-01-01'),
     bad: ['asdfasdf', 1, false]
   },
   {
-    c: Columns.binary,
+    c: columns.binary,
     good: Buffer.alloc(1),
     bad: ['asdfasdf', 1]
   },
   {
-    c: Columns.bigint,
+    c: columns.bigint,
     good: BigInt('123485812351231235'),
     bad: ['a', 0, false]
   },
   {
-    c: Columns.bool,
+    c: columns.bool,
     good: true,
     bad: ['a', 0, 0.1]
   }
@@ -127,7 +127,7 @@ for (let d of colTests) {
 it('unsupported methods escape to original zod class', () => {
   // when a method that is not supported is invoked, make sure it returns the correct
   // underlying type
-  const s = Columns.text();
+  const s = columns.text();
   const refs = s.refine(s => s === 'asdf');
   const sp = refs.safeParse('a');
   assert(!sp.success);
@@ -136,7 +136,7 @@ it('unsupported methods escape to original zod class', () => {
   ss.parse('asdf');
 
   // try with custom binary type
-  const bin = Columns.binary().primaryKey();
+  const bin = columns.binary().primaryKey();
   // bin.parse(Buffer.alloc(4));
   const refd = bin.refine(b => b.length >= 4);
   const r = refd.parse(Buffer.alloc(4));
@@ -144,9 +144,9 @@ it('unsupported methods escape to original zod class', () => {
 it('typings work with object', () => {
   // if typings dont work this test block wont compile
   const o = z.object({
-    s: Columns.text(),
-    i: Columns.int(),
-    so: Columns.text().optional()
+    s: columns.text(),
+    i: columns.int(),
+    so: columns.text().optional()
   });
   type T = z.infer<typeof o>;
   // let a1: T['s'] extends string ? true : false = true;

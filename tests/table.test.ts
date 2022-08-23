@@ -1,15 +1,15 @@
 import assert from 'assert';
 import {z} from 'zod';
-import {Columns} from '../src/column';
+import {columns} from '../src/column';
 import {InferSchema, ZsqlSchema} from '../src/schema';
 import {createTableFn, table} from '../src/table';
 import {expectType} from '../src/util';
 import {getTestDb} from './helpers';
 
 const shape = {
-  a: Columns.text().primaryKey(),
-  b: Columns.int(),
-  c: Columns.binary().optional()
+  a: columns.text().primaryKey(),
+  b: columns.int(),
+  c: columns.binary().optional()
 };
 describe('table', () => {
   [
@@ -57,9 +57,9 @@ describe('table', () => {
         assert.equal(sqlData.cols[0].dataType, 'text');
         assert(!sqlData.cols[2].required);
         const tschema = table('test', {
-          a: Columns.text().primaryKey(),
-          b: Columns.int(),
-          c: Columns.binary().optional()
+          a: columns.text().primaryKey(),
+          b: columns.int(),
+          c: columns.binary().optional()
         });
       });
 

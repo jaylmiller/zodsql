@@ -275,14 +275,13 @@ export class ZsqlBin extends ZsqlColumn<Buffer, z.ZodAnyDef> {
     } as z.ZodAnyDef);
   }
 }
-
-export namespace Columns {
-  export const text = ZsqlString.create;
-  export const int = ZsqlInt.create;
-  export const numeric = ZsqlNumeric.create;
-  export const date = ZsqlDate.create;
-  export const timestamp = ZsqlTimestamp.create;
-  export const binary = ZsqlBin.create;
-  export const bigint = ZsqlBigInt.create;
-  export const bool = ZsqlBool.create;
-}
+export const columns = {
+  text: ZsqlString.create,
+  int: ZsqlInt.create,
+  numeric: ZsqlNumeric.create,
+  date: ZsqlDate.create,
+  timestamp: ZsqlTimestamp.create,
+  binary: ZsqlBin.create,
+  bigint: ZsqlBigInt.create,
+  bool: ZsqlBool.create
+};

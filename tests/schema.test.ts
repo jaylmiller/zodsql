@@ -1,6 +1,6 @@
 import assert from 'assert';
 import {z} from 'zod';
-import {Columns} from '../src/column';
+import {columns} from '../src/column';
 import {InferSchema, ZsqlSchema, _InferSchemaRaw} from '../src/schema';
 import {table} from '../src/table';
 import {expectType} from '../src/util';
@@ -8,11 +8,11 @@ import {getTestDb} from './helpers';
 
 const shape = {
   t1: {
-    a: Columns.text(),
-    b: Columns.int().optional()
+    a: columns.text(),
+    b: columns.int().optional()
   },
   t2: {
-    c: Columns.int().primaryKey()
+    c: columns.int().primaryKey()
   }
 };
 describe('schema', () => {
