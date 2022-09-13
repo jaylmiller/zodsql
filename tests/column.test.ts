@@ -1,6 +1,7 @@
 import assert from 'assert';
 import {z, ZodEffects} from 'zod';
 import {columns, ZsqlColumnOptional, ZsqlColumn} from '../src/column';
+import {ZsqlTable} from '../src/table';
 type TypesAreEqual2<T, U> = [T] extends [U]
   ? [U] extends [T]
     ? any
@@ -44,38 +45,48 @@ const colTests = [
     bad: ['a', 0, false]
   },
   {
-    c: columns.bool,
-    good: true,
-    bad: ['a', 0, 0.1]
+    c: columns.jsonb,
+    good: JSON.stringify({asdf: 'hi'}),
+    bad: ['{"']
+  },
+  {
+    c: columns.jsonb,
+    good: {asdf: 'hi'},
+    bad: ['{"']
   }
+  // {
+  //   c: columns.jsonb,
+  //   good: {hi: 'hi'},
+  //   bad: ['{"']
+  // }
 ];
 for (let d of colTests) {
   const {c, good, bad} = d;
   describe(`column: ${c().sqlType} (wraps: ${c().zodType.name})`, () => {
     it(`stores column data`, () => {
       const t = c().sqlType;
-      assert.deepEqual(c()._getColData(), {
+      assert.deepEqual(c()._columnData(), {
         required: true,
         dataType: t
       });
       // primary key should set true
-      assert.deepEqual(c().primaryKey()._getColData(), {
+      assert.deepEqual(c().primaryKey()._columnData(), {
         required: true,
         primaryKey: true,
         dataType: t
       });
       // make sure it returns new objects instead of mutating in place
       const s = c();
-      assert.deepEqual(c().unique()._getColData(), {
+      assert.deepEqual(c().unique()._columnData(), {
         required: true,
         unique: true,
         dataType: t
       });
-      assert.deepEqual(s._getColData(), {
+      assert.deepEqual(s._columnData(), {
         required: true,
         dataType: t
       });
-      assert.deepEqual(c().optional()._getColData(), {
+      assert.deepEqual(c().optional()._columnData(), {
         required: false,
         dataType: t
       });
@@ -85,9 +96,9 @@ for (let d of colTests) {
     });
     it('copySelf', () => {
       const i = c().primaryKey();
-      const copy = i.copySelf();
+      const copy = i.copy();
       assert(copy instanceof Object.getPrototypeOf(i).constructor);
-      assert.equal(copy._getColData().primaryKey, true);
+      assert.equal(copy._columnData().primaryKey, true);
     });
     it(`optional works and gets methods`, () => {
       const i = c();
@@ -96,7 +107,7 @@ for (let d of colTests) {
       assert(uu.isOptional());
       const parsed = uu.parse(undefined);
       assert.ok(typeof parsed === 'undefined');
-      assert.ok(!uu._getColData().required);
+      assert.ok(!uu._columnData().required);
     });
     it(`parsing `, () => {
       assert.deepEqual(c().parse(good), good);
@@ -122,8 +133,21 @@ for (let d of colTests) {
         z.ZodError
       );
     });
+    it('toZodType', () => {
+      const col = c();
+      const zreg = col.toZodType();
+      assert(zreg instanceof col.zodType);
+      const zopt = col.optional().toZodType();
+      assert(zopt._def.innerType instanceof col.zodType);
+      return;
+    });
   });
 }
+it('customcol', () => {
+  const col = columns.custom<string>({sqlType: 'serial'});
+  type cc = z.infer<typeof col>;
+  const parsed = col.parse('asdf');
+});
 it('unsupported methods escape to original zod class', () => {
   // when a method that is not supported is invoked, make sure it returns the correct
   // underlying type

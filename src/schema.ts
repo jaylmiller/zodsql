@@ -2,8 +2,13 @@
 
 import assert from 'assert';
 import {objItems} from './util';
-import {ZsqlRawShape, ZsqlTable} from './table';
-import {CreateTableBuilder, CreateSchemaBuilder, Kysely} from 'kysely';
+import {InferZsqlRawShape, ZsqlRawShape, ZsqlTable} from './table';
+import {
+  CreateTableBuilder,
+  CreateSchemaBuilder,
+  Kysely,
+  Transaction
+} from 'kysely';
 import {NoDatabaseFound, TableNotFound} from './errs';
 
 export type _InferSchemaRaw<T extends {[k: string]: ZsqlTable<ZsqlRawShape>}> =
@@ -21,7 +26,6 @@ type SchemaParams = {
   db?: Kysely<any>;
   name?: string;
 };
-
 export type CreateNamedSchemaFn = <
   Schema extends {[table: string]: ZsqlRawShape}
 >(
@@ -38,8 +42,67 @@ export class ZsqlSchema<T extends AnySchema> {
   constructor(schema: T) {
     this.tables = schema;
   }
+  /**
+   * Return object for building dml. this is the main way to interact
+   * with the db
+   */
+  dmlBuilder() {
+    if (!this.db) throw new NoDatabaseFound();
+    const tables = this.tables;
+    type T1 = _InferSchemaRaw<typeof tables>;
+    if (this._name) return (this.db as Kysely<T1>).withSchema(this._name);
+    return this.db as Kysely<T1>;
+  }
 
-  bindDb(db: Kysely<any>) {
+  /**
+   * Pass a callback in that lets you use this schema object within a transaction
+   * @param runTx
+   * @returns
+   */
+  async transaction(runTx: (schema: ZsqlSchema<T>) => Promise<any>) {
+    if (!this.db) throw new NoDatabaseFound();
+    return this.db.transaction().execute(async tx => {
+      const schema = this._copy().bindDb(tx);
+      return await runTx(schema);
+    });
+  }
+
+  private _fks?: Fk<T>[];
+
+  addForeignKey<
+    FromTable extends keyof _InferSchemaRaw<T>,
+    ToTable extends Exclude<keyof _InferSchemaRaw<T>, FromTable>
+  >(def: {
+    from: {
+      table: FromTable;
+      column: keyof T[FromTable]['_output'];
+    };
+    to: {
+      table: ToTable;
+      column: keyof T[ToTable]['_output'];
+    };
+  }) {
+    if (!this._fks) this._fks = [];
+    this._fks.push(def);
+  }
+
+  _copy(): ZsqlSchema<T> {
+    return ZsqlSchema.create(
+      objItems(this.tables).reduce((acc, [name, table]) => {
+        assert(typeof name === 'string');
+        return {
+          ...acc,
+          [name]: table._copyShape()
+        };
+      }, {} as {[K in keyof T]: T[K]['_output']}),
+      {db: this.db, name: this._name}
+    ) as ZsqlSchema<T>;
+  }
+
+  /**
+   * Bind the database object to this schema
+   */
+  bindDb(db: Kysely<any> | Transaction<any>) {
     this.db = db;
     // bind db to tables in this schema
     objItems(this.tables).forEach(([_, table]) => {
@@ -57,6 +120,7 @@ export class ZsqlSchema<T extends AnySchema> {
     objItems(this.tables).forEach(([_, table]) => {
       table.__schema = name;
     });
+    return this;
   }
 
   /**
@@ -79,27 +143,18 @@ export class ZsqlSchema<T extends AnySchema> {
     if (this._name) {
       out.push(this.db.schema.createSchema(this._name).ifNotExists());
     }
-    objItems(this.tables).forEach(([_, table]) => {
+
+    objItems(this.tables).forEach(([name, table]) => {
+      const fks = this._fks?.filter(fk => fk.from.table === name) || [];
       out.push(table.ddl().ifNotExists());
     });
     return out;
   }
 
   /**
-   * Return query builder api
+   * Return the full db object. Avoid using this one (use dmlBuilder)
    */
-  getDb() {
-    if (!this.db) throw new NoDatabaseFound();
-    const tables = this.tables;
-    type T1 = _InferSchemaRaw<typeof tables>;
-    if (this._name) return (this.db as Kysely<T1>).withSchema(this._name);
-    return this.db as Kysely<T1>;
-  }
-
-  /**
-   * Return the full db object. Avoid using this one
-   */
-  getFullDbApi() {
+  _getDb() {
     if (!this.db) throw new NoDatabaseFound();
     const tables = this.tables;
     type T1 = _InferSchemaRaw<typeof tables>;
@@ -117,8 +172,8 @@ export class ZsqlSchema<T extends AnySchema> {
   }> {
     const {name, db} = params || {};
     const schema = ZsqlSchema.createHelper(schemaObj);
-    schema._name = name;
-    schema.db = db;
+    if (db) schema.bindDb(db);
+    if (name) schema.setName(name);
     return schema;
   }
 
@@ -175,6 +230,20 @@ export class ZsqlSchema<T extends AnySchema> {
     return newinst;
   }
 }
-
+type __AllCols<T extends AnySchema> = {
+  [K in keyof _InferSchemaRaw<T>]: keyof {
+    [K2 in keyof _InferSchemaRaw<T>[K]]: null;
+  };
+}[keyof _InferSchemaRaw<T>];
+type Fk<T extends AnySchema> = {
+  from: {
+    table: keyof _InferSchemaRaw<T>;
+    column: __AllCols<T>;
+  };
+  to: {
+    table: keyof _InferSchemaRaw<T>;
+    column: __AllCols<T>;
+  };
+};
 export const schema = ZsqlSchema.create;
 export const createSchemaFn = ZsqlSchema.getNewSchemaFn;

@@ -29,7 +29,7 @@ describe('schema', () => {
     describe(`schema created thru ${c.casename}`, () => {
       const schema = c.create();
       afterEach(() => {
-        schema.getFullDbApi().destroy();
+        schema._getDb().destroy();
         schema.bindDb(getTestDb());
       });
       it('schema typings', () => {
@@ -40,7 +40,7 @@ describe('schema', () => {
       });
 
       it('ddl', async () => {
-        const db = schema.getFullDbApi();
+        const db = schema._getDb();
         for (let ddl of schema.ddl()) {
           await ddl.execute();
         }
@@ -48,9 +48,18 @@ describe('schema', () => {
           await ddl.execute();
         }
       });
-
+      it('copy', () => {
+        const schema = c.create();
+        schema.setName('testy');
+        const newschema = schema._copy();
+        assert(newschema._getDb() === schema._getDb());
+        newschema.bindDb(getTestDb());
+        assert(newschema._getDb() !== schema._getDb());
+        assert(newschema._name === 'testy');
+        assert(newschema.tables.t1.__schema === 'testy');
+      });
       it('select typings', async () => {
-        const db = schema.getDb();
+        const db = schema.dmlBuilder();
         for (let ddl of schema.ddl()) {
           await ddl.execute();
         }
@@ -62,6 +71,19 @@ describe('schema', () => {
         expectType<RowT extends {'t1.a': string; a: string} ? false : true>(
           true
         );
+      });
+
+      it('foreignKey', () => {
+        schema.addForeignKey({
+          from: {
+            table: 't1',
+            column: 'a'
+          },
+          to: {
+            table: 't2',
+            column: 'c'
+          }
+        });
       });
     });
   });

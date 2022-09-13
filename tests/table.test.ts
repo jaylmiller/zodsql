@@ -1,8 +1,8 @@
 import assert from 'assert';
 import {z} from 'zod';
-import {columns} from '../src/column';
+import {columns, ZsqlColumn} from '../src/column';
 import {InferSchema, ZsqlSchema} from '../src/schema';
-import {createTableFn, table} from '../src/table';
+import {createTableFn, PrimaryKeys, table} from '../src/table';
 import {expectType} from '../src/util';
 import {getTestDb} from './helpers';
 
@@ -39,12 +39,30 @@ describe('table', () => {
         testTable.getDb().destroy();
         testTable.bindDb(getTestDb());
       });
-      it('typing works', () => {
+
+      it('typing works', async () => {
         type T = z.infer<typeof testTable>;
         expectType<T['a']>('');
         expectType<T['b']>(1);
         expectType<T['c']>(Buffer.alloc(1));
         expectType<T['c']>(undefined);
+        type PKS = PrimaryKeys<typeof testTable['columns']>;
+        type A = 'a' extends keyof PKS ? true : false;
+        type B = 'b' extends keyof PKS ? true : false;
+        expectType<A>(true);
+        expectType<B>(false);
+        testTable.fromPk({a: ''});
+        // this shouldnt compile
+        // testTable.fromPk({c: ''});
+        try {
+          const obj = await testTable.bindDb(getTestDb()).fromPk({a: ''});
+          if (obj) {
+            type C = typeof obj;
+            expectType<C['a']>('');
+            expectType<C['b']>(1);
+            expectType<C['c']>(Buffer.alloc(1));
+          }
+        } catch (e) {}
       });
 
       it('sqlData', () => {
@@ -82,6 +100,35 @@ describe('table', () => {
         return;
       });
 
+      it('from pk', async () => {
+        await testTable.ddl().execute();
+        const stmt = testTable.insert({a: 'testy', b: 1, c: Buffer.alloc(1)});
+        const res = await stmt.execute();
+        const obj = await testTable.fromPk({a: 'testy'});
+        assert.equal(obj?.b, 1);
+        const nobj = await testTable.fromPk({a: 't'});
+        assert.equal(typeof nobj, 'undefined');
+      });
+
+      it('to zod', async () => {
+        const zshape = testTable.toZodShape();
+        assert(zshape.a instanceof z.ZodString);
+        assert(zshape.b instanceof z.ZodNumber);
+        assert(zshape.c instanceof z.ZodOptional);
+        assert(zshape.c._def.innerType instanceof z.ZodAny);
+        const zt = testTable.toZodType();
+        assert(zt instanceof z.ZodObject);
+        type ZT = z.infer<typeof zt>;
+        expectType<ZT['a']>('');
+      });
+      it('cust cols', () => {
+        const tab = table('testy', {
+          cust: columns.custom<string>({sqlType: 'bigint'})
+        }).bindDb(getTestDb());
+        const compiled = tab.ddl().compile();
+        assert.ok(compiled.sql.includes('bigint'));
+        return;
+      });
       it('insert many', async () => {
         await testTable.ddl().execute();
         const stmt = testTable.insert([

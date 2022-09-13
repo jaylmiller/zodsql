@@ -2,7 +2,7 @@ import assert from 'assert';
 import {z} from 'zod';
 
 /**
- * compile time type assertions for dev stuff
+ * compile time type assertions
  */
 export const expectType = <T>(_: T): void => void 0;
 /**
@@ -18,20 +18,16 @@ export const objItems = <T extends object>(
     return [k, obj[k]];
   });
 
-/**
- * just a typesafe wrapper around a reduce that allows us to do a dict comprehension type
- * pattern without doing the big reduce pattern every time
- */
-export const objMap = <C, I extends {[k: string]: C}, O>(
+export const objFilter = <C, I extends {[k: string]: C}>(
   obj: I,
-  fn: (arg: C) => O
+  fn: (arg: C) => boolean
 ): {
   [K in keyof I]: I[K];
 } => {
   return objItems(obj).reduce(
     (acc, [k, v]) => ({
       ...acc,
-      [k]: fn(v)
+      ...(fn(v) ? {[k]: v} : {})
     }),
     {} as {
       [K in keyof I]: I[K];
