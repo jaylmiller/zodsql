@@ -2,6 +2,9 @@
   "name": "zsql",
   "version": "0.1.0",
   "description": "",
+  "repository": {
+    "url": "https://github.com/jaylmiller/zsql"
+  },
   "main": "dist/index.js",
   "types": "dist/types/index.d.ts",
   "scripts": {
