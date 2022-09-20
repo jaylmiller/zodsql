@@ -40,6 +40,9 @@ export type PrimaryKey<T extends ZsqlTable<any, any>> = PrimaryKeyRaw<
 type PkObj<T extends ZsqlRawShape> = {
   [K in keyof T as T[K]['__isPk'] extends true ? K : never]: T[K]['_output'];
 };
+type AnyColumnObject<T extends ZsqlRawShape> = {
+  [K in keyof T]?: T[K]['_output'];
+};
 export type ZsqlShapeToZod<T extends ZsqlRawShape> = {
   [K in keyof T]: z.ZodType<T[K]['_output'], T[K]['_def'], T[K]['_input']>;
 };
@@ -141,6 +144,20 @@ export class ZsqlTable<
     });
     const res = await stmt.executeTakeFirst();
     return res as unknown as {[K in keyof T]: T[K]['_output']} | undefined;
+  }
+
+  /**
+   * return all objects in table that match all the values specified in the object
+   * @param vals key-val pairs of columns to values to include in the query
+   */
+  async selectWithValues(vals: AnyColumnObject<T>) {
+    let stmt = this._getQueryBuilder().selectFrom(this.name).selectAll();
+    objItems(vals).forEach(([k, v]) => {
+      assert(typeof k === 'string');
+      stmt = stmt.where(k, '=', v);
+    });
+    const results = await stmt.execute();
+    return results as unknown as {[K in keyof T]: T[K]['_output']}[];
   }
 
   /**

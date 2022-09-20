@@ -2,7 +2,7 @@ import assert from 'assert';
 import {z} from 'zod';
 import {columns, ZsqlColumn} from '../src/column';
 import {InferSchema, ZsqlSchema} from '../src/schema';
-import {createTableFn, PrimaryKeys, table} from '../src/table';
+import {createTableFn, PrimaryKey, table} from '../src/table';
 import {expectType} from '../src/util';
 import {getTestDb} from './helpers';
 
@@ -38,31 +38,6 @@ describe('table', () => {
       afterEach(() => {
         testTable.getDb().destroy();
         testTable.bindDb(getTestDb());
-      });
-
-      it('typing works', async () => {
-        type T = z.infer<typeof testTable>;
-        expectType<T['a']>('');
-        expectType<T['b']>(1);
-        expectType<T['c']>(Buffer.alloc(1));
-        expectType<T['c']>(undefined);
-        type PKS = PrimaryKeys<typeof testTable['columns']>;
-        type A = 'a' extends keyof PKS ? true : false;
-        type B = 'b' extends keyof PKS ? true : false;
-        expectType<A>(true);
-        expectType<B>(false);
-        testTable.fromPk({a: ''});
-        // this shouldnt compile
-        // testTable.fromPk({c: ''});
-        try {
-          const obj = await testTable.bindDb(getTestDb()).fromPk({a: ''});
-          if (obj) {
-            type C = typeof obj;
-            expectType<C['a']>('');
-            expectType<C['b']>(1);
-            expectType<C['c']>(Buffer.alloc(1));
-          }
-        } catch (e) {}
       });
 
       it('sqlData', () => {
@@ -108,6 +83,21 @@ describe('table', () => {
         assert.equal(obj?.b, 1);
         const nobj = await testTable.fromPk({a: 't'});
         assert.equal(typeof nobj, 'undefined');
+      });
+
+      it('selectWithValues', async () => {
+        await testTable.ddl().execute();
+        await testTable
+          .insert({a: 'testy', b: 1, c: Buffer.alloc(1)})
+          .execute();
+        await testTable
+          .insert({a: 'testy2', b: 2, c: Buffer.alloc(1)})
+          .execute();
+        await testTable
+          .insert({a: 'testy3', b: 1, c: Buffer.alloc(1)})
+          .execute();
+        const res = await testTable.selectWithValues({a: 'testy', b: 1});
+        assert.equal(res.length, 1);
       });
 
       it('to zod', async () => {
