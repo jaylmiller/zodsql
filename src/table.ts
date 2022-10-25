@@ -23,20 +23,14 @@ export type TableParams<OptsType extends object = {}> = {
   // could be used to apply perms or other after table creation
   extraOpts?: OptsType;
 };
-// export type PrimaryKeys<T extends ZsqlRawShape> = {
-//   [K in keyof T]: T[K]['__isPk'] extends true ? T[K] : never;
-// };
+
 type PrimaryKeyRaw<T extends ZsqlRawShape> = {
   [K in keyof T as T[K]['__isPk'] extends true ? K : never]: T[K]['_output'];
 };
 export type PrimaryKey<T extends ZsqlTable<any, any>> = PrimaryKeyRaw<
   T['columns']
 >;
-// export type PrimaryKey2<T extends ZsqlTable<any, any>> = {
-//   [K in keyof T['columns'] as T['columns'][K]['__isPk'] extends true
-//     ? K
-//     : never]: T[K][];
-// };
+
 type PkObj<T extends ZsqlRawShape> = {
   [K in keyof T as T[K]['__isPk'] extends true ? K : never]: T[K]['_output'];
 };

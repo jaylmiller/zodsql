@@ -31,6 +31,8 @@ export abstract class ZsqlColumn<
   // zod types are non-optional by default
   private coldata: Omit<ColumnData, 'dataType'> = {required: true};
   __isPk!: IsPk;
+  // optional type identifier
+  _id?: string;
   sqlType!: ColumnDataType;
   zodType!: ClassConstructor<z.ZodType<Output, Def, Input>>;
   _columnData(): ColumnData {
@@ -48,6 +50,7 @@ export abstract class ZsqlColumn<
     const newCol = ZsqlColumnOptional.create(this);
     newCol.coldata = this.coldata;
     newCol.sqlType = this.sqlType;
+    newCol._id = this._id;
     return newCol;
   }
 
@@ -70,6 +73,7 @@ export abstract class ZsqlColumn<
     // copy our extra data to new object
     newInst.sqlType = this.sqlType;
     newInst.coldata = {...this.coldata};
+    newInst._id = this._id;
     return newInst;
   }
 
