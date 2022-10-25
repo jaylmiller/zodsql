@@ -371,18 +371,22 @@ export class ZsqlJsonb extends ZsqlColumn<any, any> {
  */
 export class ZsqlCustomColumn<T = any> extends ZsqlColumn<T> {
   zodType = z.ZodAny;
+  _id?: string;
   _parse(input: z.ParseInput) {
     return this._zodParser(input);
   }
   toZodType() {
     return z.ZodAny.create({...this._def});
   }
-  static create<T_1>(params: RawCreateParams & {sqlType: ColumnDataType}) {
+  static create<T_1>(
+    params: RawCreateParams & {sqlType: ColumnDataType; id?: string}
+  ) {
     const col = new ZsqlCustomColumn<T_1>({
       typeName: z.ZodFirstPartyTypeKind.ZodAny,
       ...processCreateParams(params)
     } as z.ZodAnyDef);
     col.sqlType = params.sqlType;
+    col._id = params.id;
     return col;
   }
 }
