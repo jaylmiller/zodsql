@@ -16,6 +16,7 @@ export type ZsqlRawShape = {
 
 expectType<ZsqlRawShape extends z.ZodRawShape ? true : false>(true);
 type UnknownKeysParam = 'passthrough' | 'strict' | 'strip';
+export type InferTable<T extends ZsqlTable<any>> = T['_output'];
 
 export type TableParams<OptsType extends object = {}> = {
   name: string;
